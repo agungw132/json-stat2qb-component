@@ -1,4 +1,4 @@
-package org.deri.opencube.jsonstat2qb;
+package org.deri.jsonstat2qb.opencube;
 
 import java.io.Serializable;
 import java.io.StringReader;
@@ -16,6 +16,8 @@ import com.hp.hpl.jena.graph.Triple;
 public class JsonstatProvider extends AbstractFlexProvider<JsonstatProvider.Config> {
 	private static final long serialVersionUID = 1L;
 
+	private static final String DEFAULT_BASE_URI = "http://example.com/default-dataset";
+
 	public static class Config implements Serializable {
 
 		private static final long serialVersionUID = 1L;
@@ -23,6 +25,9 @@ public class JsonstatProvider extends AbstractFlexProvider<JsonstatProvider.Conf
 		@ParameterConfigDoc(desc = "URL of the input JSON-stat file. Use file:// URLs for local files.", type=Type.FILEEDITOR)
 		public String jsonFileLocation;
 
+		@ParameterConfigDoc(desc = "Base URI", type = Type.SIMPLE, defaultContent = DEFAULT_BASE_URI)
+		public String systemBaseURI;
+		
 	}
 
 	@Override
