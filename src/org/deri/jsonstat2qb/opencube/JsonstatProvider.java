@@ -8,10 +8,10 @@ import java.util.List;
 import org.apache.commons.lang.StringUtils;
 import org.deri.jsonstat2qb.opencube.ui.EncodingSelectValueFactory;
 import org.deri.jsonstat2qb.jsonstat2qb;
-
 import org.openrdf.model.Statement;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.ValueFactoryImpl;
+import org.semarglproject.vocab.XSD;
 
 import com.fluidops.iwb.model.ParameterConfigDoc;
 import com.fluidops.iwb.model.ParameterConfigDoc.Type;
@@ -60,36 +60,39 @@ public class JsonstatProvider extends AbstractFlexProvider<JsonstatProvider.Conf
 	public void gather(List<Statement> res) throws Exception {
 
 		Config c = config;
-
-		jsonstat2qb converter = new jsonstat2qb(null);
+		StringBuilder parameters = new StringBuilder();
 
 		Model model = null;
 
 		// BaseUri
 		if (StringUtils.isNotBlank(c.systemBaseURI) ) {
-			converter.setBaseUri(c.systemBaseURI);
+			// converter.setBaseUri(c.systemBaseURI);
+			parameters.append("-b " + c.systemBaseURI + " ");
 		}
 
 		// Encoding
 		if (StringUtils.isNotBlank(c.encoding) && ( ! c.encoding.equals("Autodetect")) ) {
-			converter.setEncoding(c.encoding);
+			// converter.setEncoding(c.encoding);
+			parameters.append("-e " + c.encoding + " ");
 		}
-		
+
 		try {
 
 			// jsonFileLocation
 			if (StringUtils.isNotBlank(c.jsonFileLocation) ) {
-				// TODO separate function
-				model = converter.jsonstat2qb(c.jsonFileLocation);
-				
+
+				parameters.append(c.jsonFileLocation);
+
+				jsonstat2qb.setBaseUri(c.systemBaseURI);
+
+				model = jsonstat2qb.jsonstat2qb(c.jsonFileLocation);
+
 				StmtIterator iter = model.listStatements();
 
 				ValueFactory factory = new ValueFactoryImpl();
-				
-				int counter = 1;
-				 
+
 				while (iter.hasNext()) {
-					
+
 					Triple t = iter.nextStatement().asTriple();
 
 					Node n = t.getObject();
@@ -97,12 +100,13 @@ public class JsonstatProvider extends AbstractFlexProvider<JsonstatProvider.Conf
 
 					if (t.getSubject().isURI()) {
 						if (n.isLiteral()) {
-							// TODO Literals are treated as strings (no datatypes
-							// retained)
+							// TODO Literals are treated as strings (no datatypes retained)
 							st = factory.createStatement(
 									factory.createURI(t.getSubject().getURI()),
 									factory.createURI(t.getPredicate().getURI()),
-									factory.createLiteral(n.toString()));
+									// always double...
+									//factory.createLiteral(Double.parseDouble((String) n.getLiteralValue())));
+									factory.createLiteral( n.getLiteralValue().toString(), XSD.DOUBLE ));
 						} else if (n.isURI()) {
 							st = factory.createStatement(
 									factory.createURI(t.getSubject().getURI()),
@@ -134,13 +138,14 @@ public class JsonstatProvider extends AbstractFlexProvider<JsonstatProvider.Conf
 									factory.createBNode(n.toString()));
 						}
 					}
+
 					res.add(st);
 				}
 
 			}
-			
+
 		} catch (Exception e) {
-			// don nothing
+		    System.out.println("Error: " + e.getMessage());
 		}
 
 	}
