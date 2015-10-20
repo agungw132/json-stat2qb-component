@@ -1,13 +1,12 @@
 package org.deri.jsonstat2qb.opencube;
 
 import java.io.Serializable;
-import java.io.StringReader;
-import java.util.Iterator;
 import java.util.List;
 
 import org.apache.commons.lang.StringUtils;
-import org.deri.jsonstat2qb.opencube.ui.EncodingSelectValueFactory;
 import org.deri.jsonstat2qb.jsonstat2qb;
+import org.deri.jsonstat2qb.opencube.ui.EncodingSelectValueFactory;
+import org.deri.jsonstat2qb.opencube.ui.LanguageSelectValueFactory;
 import org.openrdf.model.Statement;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.ValueFactoryImpl;
@@ -15,25 +14,27 @@ import org.semarglproject.vocab.XSD;
 
 import com.fluidops.iwb.model.ParameterConfigDoc;
 import com.fluidops.iwb.model.ParameterConfigDoc.Type;
+import com.fluidops.iwb.model.TypeConfigDoc;
 import com.fluidops.iwb.provider.AbstractFlexProvider;
 import com.hp.hpl.jena.graph.Node;
 import com.hp.hpl.jena.graph.Triple;
 import com.hp.hpl.jena.rdf.model.Model;
-import com.hp.hpl.jena.rdf.model.ModelFactory;
 import com.hp.hpl.jena.rdf.model.StmtIterator;
 
+@TypeConfigDoc("The JSON-stat2qb Data Provider enables the generation of an RDF Data Cube from JSON-stat data source.")
 public class JsonstatProvider extends AbstractFlexProvider<JsonstatProvider.Config> {
 	private static final long serialVersionUID = 1L;
 
-	private static final String DEFAULT_BASE_URI = "http://example.com/default-dataset";
+	private static final String DEFAULT_BASE_URI = "http://example.com/";
 
 	public static class Config implements Serializable {
 
 		private static final long serialVersionUID = 1L;
 
 		@ParameterConfigDoc(
-				desc = "URL of the input JSON-stat file. Use file:// URLs for local files.",
-				type=Type.FILEEDITOR)
+				desc = "The location of source JSON-stat file. Please provide either a remote source (http://, https://, or file:) or upload *.json file",
+				type=Type.FILEEDITOR,
+				required=true)
 		public String jsonFileLocation;
 
 		@ParameterConfigDoc(
@@ -42,13 +43,29 @@ public class JsonstatProvider extends AbstractFlexProvider<JsonstatProvider.Conf
 				defaultContent = DEFAULT_BASE_URI)
 		public String systemBaseURI;
 
+
 		@ParameterConfigDoc(
-				desc = "The CSV file's character encoding",
+				desc = "Data language (used for label)",
+				required = false,
+				type = Type.DROPDOWN,
+				selectValuesFactory = LanguageSelectValueFactory.class)
+		public String lang;
+
+		@ParameterConfigDoc(
+				desc = "File's character encoding",
 				required = false,
 				type = Type.DROPDOWN,
 				selectValuesFactory = EncodingSelectValueFactory.class)
 		public String encoding;
-		
+
+//		@ParameterConfigDoc(
+//				desc="The location of source. Please provide either a remote source (http://, https://, or file:) or upload *.json file.", 
+//				required=true )
+//		@FileSelector(
+//				fileType=FileType.FILE, 
+//				allowMultiFileUpload=false)
+//		public String location_tmp;
+
 	}
 
 	@Override
@@ -60,30 +77,28 @@ public class JsonstatProvider extends AbstractFlexProvider<JsonstatProvider.Conf
 	public void gather(List<Statement> res) throws Exception {
 
 		Config c = config;
-		StringBuilder parameters = new StringBuilder();
 
 		Model model = null;
 
 		// BaseUri
 		if (StringUtils.isNotBlank(c.systemBaseURI) ) {
-			// converter.setBaseUri(c.systemBaseURI);
-			parameters.append("-b " + c.systemBaseURI + " ");
+			jsonstat2qb.setBaseUri(c.systemBaseURI);
+		}
+
+		// Language
+		if (StringUtils.isBlank(c.lang) ) {
+			c.lang = "en";
 		}
 
 		// Encoding
 		if (StringUtils.isNotBlank(c.encoding) && ( ! c.encoding.equals("Autodetect")) ) {
-			// converter.setEncoding(c.encoding);
-			parameters.append("-e " + c.encoding + " ");
+			// jsonstat2qb.setEncoding(c.encoding);
 		}
 
 		try {
 
 			// jsonFileLocation
 			if (StringUtils.isNotBlank(c.jsonFileLocation) ) {
-
-				parameters.append(c.jsonFileLocation);
-
-				jsonstat2qb.setBaseUri(c.systemBaseURI);
 
 				model = jsonstat2qb.jsonstat2qb(c.jsonFileLocation);
 
@@ -100,13 +115,20 @@ public class JsonstatProvider extends AbstractFlexProvider<JsonstatProvider.Conf
 
 					if (t.getSubject().isURI()) {
 						if (n.isLiteral()) {
-							// TODO Literals are treated as strings (no datatypes retained)
-							st = factory.createStatement(
-									factory.createURI(t.getSubject().getURI()),
-									factory.createURI(t.getPredicate().getURI()),
-									// always double...
-									//factory.createLiteral(Double.parseDouble((String) n.getLiteralValue())));
-									factory.createLiteral( n.getLiteralValue().toString(), XSD.DOUBLE ));
+
+							try {
+								Double.parseDouble( n.getLiteralValue().toString() );
+								st = factory.createStatement(
+										factory.createURI(t.getSubject().getURI()),
+										factory.createURI(t.getPredicate().getURI()),
+										factory.createLiteral( n.getLiteralValue().toString(), XSD.DOUBLE ));
+							} catch (Exception e) {
+								st = factory.createStatement(
+										factory.createURI(t.getSubject().getURI()),
+										factory.createURI(t.getPredicate().getURI()),
+										factory.createLiteral( n.getLiteralValue().toString(), c.lang ));
+							}
+
 						} else if (n.isURI()) {
 							st = factory.createStatement(
 									factory.createURI(t.getSubject().getURI()),
@@ -121,7 +143,6 @@ public class JsonstatProvider extends AbstractFlexProvider<JsonstatProvider.Conf
 					} else {
 						// subject is a blank node
 						if (n.isLiteral()) {
-							// TODO Literals are treated as strings (no datatypes retained)
 							st = factory.createStatement(
 									factory.createBNode(t.getSubject().toString()),
 									factory.createURI(t.getPredicate().getURI()),
@@ -138,12 +159,9 @@ public class JsonstatProvider extends AbstractFlexProvider<JsonstatProvider.Conf
 									factory.createBNode(n.toString()));
 						}
 					}
-
 					res.add(st);
 				}
-
 			}
-
 		} catch (Exception e) {
 		    System.out.println("Error: " + e.getMessage());
 		}
